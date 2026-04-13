@@ -25,6 +25,7 @@ export default function Trabajos() {
 
   const [expAmt, setExpAmt] = useState('');
   const [expDesc, setExpDesc] = useState('');
+  const [editingExpId, setEditingExpId] = useState(null); // id del gasto a editar
 
   // CREATE JOB
   const handleAddJob = async (e) => {
@@ -99,17 +100,41 @@ export default function Trabajos() {
     closeModals();
   };
 
-  // ADD EXPENSE
+  // ADD OR EDIT EXPENSE
   const handleAddExpense = async (e) => {
     e.preventDefault();
     if (!showExpModal || !expAmt) return;
-    await addDoc(collection(db, `users/${userId}/gastos`), {
-      jobId: showExpModal,
-      amount: Number(expAmt),
-      desc: expDesc || 'Gasto/Viático',
-      date: serverTimestamp()
-    });
+
+    if (editingExpId) {
+      // Editar
+      await updateDoc(doc(db, `users/${userId}/gastos`, editingExpId), {
+        amount: Number(expAmt),
+        desc: expDesc || 'Gasto/Viático'
+      });
+    } else {
+      // Nuevo
+      await addDoc(collection(db, `users/${userId}/gastos`), {
+        jobId: showExpModal,
+        amount: Number(expAmt),
+        desc: expDesc || 'Gasto/Viático',
+        date: serverTimestamp()
+      });
+    }
+    
     closeModals();
+  };
+
+  const handleDeleteExpense = async (expId) => {
+    if (window.confirm('¿Seguro que deseas eliminar este gasto? Se recalculará tu sueldo neto y patrimonio.')) {
+      await deleteDoc(doc(db, `users/${userId}/gastos`, expId));
+    }
+  };
+
+  const openEditExpense = (gasto) => {
+    setExpAmt(gasto.amount.toString());
+    setExpDesc(gasto.desc);
+    setEditingExpId(gasto.id);
+    setShowExpModal(gasto.jobId);
   };
 
   const closeModals = () => {
@@ -117,6 +142,7 @@ export default function Trabajos() {
     setShowEditModal(null);
     setShowRenewModal(null);
     setShowExpModal(null);
+    setEditingExpId(null);
     setTitle('');
     setSalary('');
     setLeftoverAmt('');
@@ -126,7 +152,7 @@ export default function Trabajos() {
   };
 
   const getExpensesForJob = (jobId) => {
-    return gastos.filter(g => g.jobId === jobId).reduce((acc, g) => acc + Number(g.amount), 0);
+    return gastos.filter(g => g.jobId === jobId);
   };
 
   if (loading) return <div>Cargando...</div>;
@@ -141,8 +167,9 @@ export default function Trabajos() {
       </div>
 
       {trabajos.map(job => {
-        const jobExpenses = getExpensesForJob(job.id);
-        const netto = job.salary - jobExpenses;
+        const jobExpensesList = getExpensesForJob(job.id);
+        const jobExpensesTotal = jobExpensesList.reduce((acc, g) => acc + Number(g.amount), 0);
+        const netto = job.salary - jobExpensesTotal;
 
         return (
           <div key={job.id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -167,14 +194,33 @@ export default function Trabajos() {
                 <p style={{ fontWeight: 600 }}><Value amount={job.salary} /></p>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <p className="text-muted" style={{ fontSize: '0.75rem' }}>Gastos</p>
-                <p className="text-danger" style={{ fontWeight: 600 }}>- <Value amount={jobExpenses} /></p>
+                <p className="text-muted" style={{ fontSize: '0.75rem' }}>Gastos Totales</p>
+                <p className="text-danger" style={{ fontWeight: 600 }}>- <Value amount={jobExpensesTotal} /></p>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <p className="text-muted" style={{ fontSize: '0.75rem' }}>Neto</p>
+                <p className="text-muted" style={{ fontSize: '0.75rem' }}>Neto Disp.</p>
                 <p className="text-success" style={{ fontWeight: 700 }}><Value amount={netto} /></p>
               </div>
             </div>
+            
+            {/* Lista detallada de Gastos */}
+            {jobExpensesList.length > 0 && (
+              <div style={{ marginTop: '0.25rem', padding: '0.5rem', borderLeft: '2px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <p className="text-muted" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Detalle de Viáticos</p>
+                {jobExpensesList.map(g => (
+                  <div key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <p style={{ fontSize: '0.875rem', fontWeight: 500 }}>{g.desc}</p>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <p className="text-danger" style={{ fontWeight: 600, fontSize: '0.875rem' }}>- <Value amount={g.amount} /></p>
+                      <button onClick={() => openEditExpense(g)} className="text-muted"><Edit2 size={14} /></button>
+                      <button onClick={() => handleDeleteExpense(g.id)} className="text-danger"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button onClick={() => setShowExpModal(job.id)} className="btn-outline" style={{ flex: 1, padding: '0.5rem', fontSize: '0.75rem', backgroundColor: 'var(--bg-app)' }}>
@@ -210,11 +256,11 @@ export default function Trabajos() {
       )}
 
       {showExpModal && (
-        <Modal title="Registrar Gasto/Viático" onClose={closeModals}>
+        <Modal title={editingExpId ? "Editar Gasto" : "Registrar Gasto/Viático"} onClose={closeModals}>
           <form onSubmit={handleAddExpense}>
             <input className="input-field" type="number" placeholder="Monto del gasto" value={expAmt} onChange={e => setExpAmt(e.target.value)} required />
             <input className="input-field" placeholder="Descripción (Ej: Nafta)" value={expDesc} onChange={e => setExpDesc(e.target.value)} required />
-            <button className="btn-primary" style={{ width: '100%' }}>Guardar Gasto</button>
+            <button className="btn-primary" style={{ width: '100%' }}>{editingExpId ? 'Guardar Cambios' : 'Guardar Gasto'}</button>
           </form>
         </Modal>
       )}
