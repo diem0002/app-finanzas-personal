@@ -43,9 +43,10 @@ export default function Trabajos() {
   // EDIT JOB
   const handleEditJob = async (e) => {
     e.preventDefault();
-    if (!showEditModal || !title) return;
+    if (!showEditModal || !title || !salary) return;
     await updateDoc(doc(db, `users/${userId}/trabajos`, showEditModal), {
-      name: title
+      name: title,
+      salary: Number(salary)
     });
     closeModals();
   };
@@ -183,7 +184,7 @@ export default function Trabajos() {
               </div>
               
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={() => {setTitle(job.name); setShowEditModal(job.id);}} className="text-muted"><Edit2 size={16} /></button>
+                <button onClick={() => {setTitle(job.name); setSalary(job.salary.toString()); setShowEditModal(job.id);}} className="text-muted"><Edit2 size={16} /></button>
                 <button onClick={() => handleDelete(job.id)} className="text-danger"><Trash2 size={16} /></button>
               </div>
             </div>
@@ -247,10 +248,13 @@ export default function Trabajos() {
       )}
 
       {showEditModal && (
-        <Modal title="Editar Nombre" onClose={closeModals}>
+        <Modal title="Editar Trabajo" onClose={closeModals}>
           <form onSubmit={handleEditJob}>
+            <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>Nombre del Trabajo</label>
             <input className="input-field" placeholder="Nuevo Nombre" value={title} onChange={e => setTitle(e.target.value)} required />
-            <button className="btn-primary" style={{ width: '100%' }}>Guardar</button>
+            <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>Sueldo Bruto Base</label>
+            <input className="input-field" type="number" placeholder="Nuevo Sueldo Bruto" value={salary} onChange={e => setSalary(e.target.value)} required />
+            <button className="btn-primary" style={{ width: '100%' }}>Guardar Cambios</button>
           </form>
         </Modal>
       )}
