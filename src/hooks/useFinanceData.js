@@ -11,7 +11,7 @@ export function useFinanceData() {
     sobrantes: [],
     gastos: [],
     historialSueldos: [],
-    totals: { sueldos: 0, ahorrosArs: 0, ahorrosUsd: 0, sobrantes: 0, gastos: 0, granTotalArs: 0 },
+    totals: { sueldos: 0, aguinaldos: 0, ahorrosArs: 0, ahorrosUsd: 0, sobrantes: 0, gastos: 0, granTotalArs: 0 },
     loading: true
   });
 
@@ -71,6 +71,7 @@ export function useFinanceData() {
       
       // Compute Totals
       const sueldos = newState.trabajos.reduce((acc, job) => acc + (Number(job.salary) || 0), 0);
+      const aguinaldos = newState.trabajos.reduce((acc, job) => acc + (Number(job.aguinaldo) || 0), 0);
       
       const ahorrosArs = newState.ahorros.reduce((acc, tx) => acc + (Number(tx.amountArs) || 0), 0);
       const ahorrosUsd = newState.ahorros.reduce((acc, tx) => acc + (Number(tx.amountUsd) || 0), 0);
@@ -79,11 +80,11 @@ export function useFinanceData() {
       
       const gastos = newState.gastos.reduce((acc, tx) => acc + (Number(tx.amount) || 0), 0);
 
-      const granTotalArs = (sueldos - gastos) + ahorrosArs + sobrantes;
+      const granTotalArs = (sueldos + aguinaldos - gastos) + ahorrosArs + sobrantes;
 
       return {
         ...newState,
-        totals: { sueldos, ahorrosArs, ahorrosUsd, sobrantes, gastos, granTotalArs },
+        totals: { sueldos, aguinaldos, ahorrosArs, ahorrosUsd, sobrantes, gastos, granTotalArs },
         loading: false
       };
     });

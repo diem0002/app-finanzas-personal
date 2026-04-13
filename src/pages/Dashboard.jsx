@@ -20,8 +20,8 @@ export default function Dashboard() {
   // Calculate historical values if a past month is selected
   let dSueldos = totals.sueldos;
   let dGastos = totals.gastos;
-  let dAguinaldo = 0;
-  let dNeto = dSueldos - dGastos;
+  let dAguinaldo = totals.aguinaldos;
+  let dNeto = dSueldos + dAguinaldo - dGastos;
 
   if (isHistorical) {
     // Para historial, usamos el snapshot de sueldos que se guardó en "Renovar Mes"
@@ -103,7 +103,7 @@ export default function Dashboard() {
           <span style={{ fontWeight: 500 }}><Value amount={dSueldos} /></span>
         </div>
         
-        {isHistorical && dAguinaldo > 0 && (
+        {dAguinaldo > 0 && (
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
             <span className="text-muted" style={{ fontSize: '0.875rem' }}>Aguinaldo / Bonos</span>
             <span className="text-secondary" style={{ fontWeight: 500 }}>+ <Value amount={dAguinaldo} /></span>

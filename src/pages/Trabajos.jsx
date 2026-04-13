@@ -19,10 +19,11 @@ export default function Trabajos() {
   // States
   const [title, setTitle] = useState('');
   const [salary, setSalary] = useState('');
+  const [aguinaldoVal, setAguinaldoVal] = useState('');
   
-  const [aguinaldoAmt, setAguinaldoAmt] = useState('');
   const [leftoverAmt, setLeftoverAmt] = useState('');
   const [nextSalary, setNextSalary] = useState('');
+  const [nextAguinaldo, setNextAguinaldo] = useState('');
 
   const [expAmt, setExpAmt] = useState('');
   const [expDesc, setExpDesc] = useState('');
@@ -35,6 +36,7 @@ export default function Trabajos() {
     await addDoc(collection(db, `users/${userId}/trabajos`), {
       name: title,
       salary: Number(salary),
+      aguinaldo: Number(aguinaldoVal) || 0,
       createdAt: serverTimestamp(),
       lastUpdated: new Date().toISOString()
     });
@@ -47,7 +49,8 @@ export default function Trabajos() {
     if (!showEditModal || !title || !salary) return;
     await updateDoc(doc(db, `users/${userId}/trabajos`, showEditModal), {
       name: title,
-      salary: Number(salary)
+      salary: Number(salary),
+      aguinaldo: Number(aguinaldoVal) || 0
     });
     closeModals();
   };
@@ -84,15 +87,16 @@ export default function Trabajos() {
       jobId: job.id,
       name: job.name,
       salary: job.salary,
-      aguinaldo: Number(aguinaldoAmt),
+      aguinaldo: job.aguinaldo || 0,
       gastosTotales: jobExpenses,
       mes: mesSnapshot,
       createdAt: serverTimestamp()
     });
 
-    // 3. Actualizar el trabajo con el nuevo sueldo
+    // 3. Actualizar el trabajo con el nuevo sueldo y aguinaldo
     await updateDoc(doc(db, `users/${userId}/trabajos`, showRenewModal), {
       salary: Number(nextSalary),
+      aguinaldo: Number(nextAguinaldo) || 0,
       lastUpdated: new Date().toISOString()
     });
 
@@ -146,7 +150,8 @@ export default function Trabajos() {
     setShowRenewModal(null);
     setShowExpModal(null);
     setEditingExpId(null);
-    setAguinaldoAmt('');
+    setAguinaldoVal('');
+    setNextAguinaldo('');
     setTitle('');
     setSalary('');
     setLeftoverAmt('');
@@ -187,7 +192,7 @@ export default function Trabajos() {
               </div>
               
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={() => {setTitle(job.name); setSalary(job.salary.toString()); setShowEditModal(job.id);}} className="text-muted"><Edit2 size={16} /></button>
+                <button onClick={() => {setTitle(job.name); setSalary(job.salary.toString()); setAguinaldoVal((job.aguinaldo||0).toString()); setShowEditModal(job.id);}} className="text-muted"><Edit2 size={16} /></button>
                 <button onClick={() => handleDelete(job.id)} className="text-danger"><Trash2 size={16} /></button>
               </div>
             </div>
@@ -244,7 +249,8 @@ export default function Trabajos() {
         <Modal title="Nuevo Trabajo" onClose={closeModals}>
           <form onSubmit={handleAddJob}>
             <input className="input-field" placeholder="Nombre (Ej: Oficina)" value={title} onChange={e => setTitle(e.target.value)} required />
-            <input className="input-field" type="number" placeholder="Sueldo" value={salary} onChange={e => setSalary(e.target.value)} required />
+            <input className="input-field" type="number" placeholder="Sueldo Base" value={salary} onChange={e => setSalary(e.target.value)} required />
+            <input className="input-field" type="number" placeholder="Aguinaldo / Bono (opcional)" value={aguinaldoVal} onChange={e => setAguinaldoVal(e.target.value)} />
             <button className="btn-primary" style={{ width: '100%' }}>Crear</button>
           </form>
         </Modal>
@@ -257,6 +263,8 @@ export default function Trabajos() {
             <input className="input-field" placeholder="Nuevo Nombre" value={title} onChange={e => setTitle(e.target.value)} required />
             <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>Sueldo Bruto Base</label>
             <input className="input-field" type="number" placeholder="Nuevo Sueldo Bruto" value={salary} onChange={e => setSalary(e.target.value)} required />
+            <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>Aguinaldo (Opcional)</label>
+            <input className="input-field" type="number" placeholder="Aguinaldo / Bono" value={aguinaldoVal} onChange={e => setAguinaldoVal(e.target.value)} />
             <button className="btn-primary" style={{ width: '100%' }}>Guardar Cambios</button>
           </form>
         </Modal>
@@ -277,14 +285,17 @@ export default function Trabajos() {
           <form onSubmit={handleRenew}>
             <p style={{ fontSize: '0.875rem', marginBottom: '1rem', color: 'var(--primary)' }}>Cerrando el mes para esta tarjeta.</p>
             
-            <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>¿El mes pasado cobraste Aguinaldo? (Opcional)</label>
-            <input className="input-field" type="number" placeholder="Ej: 50000" value={aguinaldoAmt} onChange={e => setAguinaldoAmt(e.target.value)} />
-            
-            <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>¿Plata que te SOBRÓ del mes anterior?</label>
+            <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>¿Plata que te SOBRÓ del mes que cerramos?</label>
             <input className="input-field" type="number" placeholder="0 si no sobró nada" value={leftoverAmt} onChange={e => setLeftoverAmt(e.target.value)} required />
             
+            <p style={{ fontSize: '0.875rem', margin: '1.5rem 0 1rem 0', fontWeight: '500' }}>Carga del Nuevo Mes:</p>
+
             <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>Sueldo del NUEVO mes</label>
             <input className="input-field" type="number" placeholder="Sueldo a cobrar ahora" value={nextSalary} onChange={e => setNextSalary(e.target.value)} required />
+            
+            <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>Aguinaldo (Si corresponde a este nuevo mes)</label>
+            <input className="input-field" type="number" placeholder="Dejar vacío si no aplica" value={nextAguinaldo} onChange={e => setNextAguinaldo(e.target.value)} />
+
             <button className="btn-primary" style={{ width: '100%' }}>Renovar</button>
           </form>
         </Modal>
