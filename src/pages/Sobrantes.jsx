@@ -1,17 +1,19 @@
 import { useState } from 'react';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import useStore from '../store/useStore';
 import { useFinanceData } from '../hooks/useFinanceData';
 import Value from '../components/Value';
-import { PiggyBank, ArrowDownCircle, X } from 'lucide-react';
+import { PiggyBank, ArrowDownCircle, X, Edit2, Trash2 } from 'lucide-react';
 
 export default function Sobrantes() {
   const userId = useStore((state) => state.userId);
   const { sobrantes, totals, loading } = useFinanceData();
-  const [modalType, setModalType] = useState(null); // 'convertir', 'retirar'
+  const [modalType, setModalType] = useState(null); // 'convertir', 'retirar', 'editar'
+  const [editingId, setEditingId] = useState(null);
   
   const [amount, setAmount] = useState('');
+  const [desc, setDesc] = useState('');
 
   const handleAction = async (e) => {
     e.preventDefault();
@@ -19,7 +21,16 @@ export default function Sobrantes() {
 
     const amt = Number(amount);
 
-    if (amt > totals.sobrantes) {
+    if (modalType === 'editar') {
+      await updateDoc(doc(db, `users/${userId}/sobrantes`, editingId), {
+        amount: amt,
+        desc: desc || 'Sobrante editado'
+      });
+      closeModal();
+      return;
+    }
+
+    if (amt > totals.sobrantes && modalType !== 'editar') {
       alert("No tienes suficientes sobrantes para realizar esta acción.");
       return;
     }
@@ -47,8 +58,27 @@ export default function Sobrantes() {
       });
     }
 
+    closeModal();
+  };
+
+  const handleDelete = async (txId) => {
+    if (window.confirm('¿Seguro que deseas eliminar este registro de sobrante?')) {
+      await deleteDoc(doc(db, `users/${userId}/sobrantes`, txId));
+    }
+  };
+
+  const openEdit = (tx) => {
+    setEditingId(tx.id);
+    setAmount(tx.amount.toString());
+    setDesc(tx.desc);
+    setModalType('editar');
+  };
+
+  const closeModal = () => {
     setModalType(null);
+    setEditingId(null);
     setAmount('');
+    setDesc('');
   };
 
   if (loading) return <div>Cargando...</div>;
@@ -78,13 +108,19 @@ export default function Sobrantes() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {sobrantes.length === 0 && <p className="text-muted" style={{ fontSize: '0.875rem' }}>No hay movimientos aún.</p>}
           {sobrantes.map(t => (
-            <div key={t.id} className="glass-card" style={{ padding: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <p style={{ fontWeight: 500, fontSize: '0.875rem' }}>{t.desc}</p>
-                <p className="text-muted" style={{ fontSize: '0.75rem' }}>{t.createdAt?.toDate().toLocaleDateString()}</p>
+            <div key={t.id} className="glass-card" style={{ padding: '1rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <p style={{ fontWeight: 500, fontSize: '0.875rem' }}>{t.desc}</p>
+                  <p className="text-muted" style={{ fontSize: '0.75rem' }}>{t.createdAt?.toDate().toLocaleDateString()}</p>
+                </div>
+                <div style={{ fontWeight: 600, fontSize: '0.875rem', color: t.amount > 0 ? 'var(--secondary)' : 'var(--text-main)' }}>
+                   {t.amount > 0 ? '+' : ''}<Value amount={t.amount} />
+                </div>
               </div>
-              <div style={{ fontWeight: 600, fontSize: '0.875rem', color: t.amount > 0 ? 'var(--secondary)' : 'var(--text-main)' }}>
-                 {t.amount > 0 ? '+' : ''}<Value amount={t.amount} />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', borderTop: '1px solid var(--border-color)', paddingTop: '0.5rem' }}>
+                <button onClick={() => openEdit(t)} className="btn-outline" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}><Edit2 size={14}/></button>
+                <button onClick={() => handleDelete(t.id)} className="btn-outline text-danger" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }}><Trash2 size={14}/></button>
               </div>
             </div>
           ))}
@@ -92,19 +128,25 @@ export default function Sobrantes() {
       </div>
 
       {modalType && (
-        <Modal title={modalType === 'convertir' ? 'Mover a Ahorros' : 'Retirar Sobrante'} onClose={() => setModalType(null)}>
+        <Modal title={modalType === 'convertir' ? 'Mover a Ahorros' : modalType === 'editar' ? 'Editar Sobrante' : 'Retirar Sobrante'} onClose={closeModal}>
           <form onSubmit={handleAction}>
             <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>
-              Monto a {modalType === 'convertir' ? 'convertir' : 'retirar'} (Max: <Value amount={totals.sobrantes} />)
+              Monto {modalType === 'editar' ? '' : `(Max: ${totals.sobrantes})`}
             </label>
             <input 
               className="input-field" 
               type="number" 
               value={amount} 
               onChange={e => setAmount(e.target.value)} 
-              max={totals.sobrantes}
+              max={modalType === 'editar' ? undefined : totals.sobrantes}
               required 
             />
+            {modalType === 'editar' && (
+              <>
+                <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>Concepto</label>
+                <input className="input-field" type="text" value={desc} onChange={e => setDesc(e.target.value)} required />
+              </>
+            )}
             <button className="btn-primary" style={{ width: '100%' }}>Confirmar</button>
           </form>
         </Modal>
