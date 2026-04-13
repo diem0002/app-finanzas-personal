@@ -20,6 +20,7 @@ export default function Trabajos() {
   const [title, setTitle] = useState('');
   const [salary, setSalary] = useState('');
   
+  const [aguinaldoAmt, setAguinaldoAmt] = useState('');
   const [leftoverAmt, setLeftoverAmt] = useState('');
   const [nextSalary, setNextSalary] = useState('');
 
@@ -83,6 +84,7 @@ export default function Trabajos() {
       jobId: job.id,
       name: job.name,
       salary: job.salary,
+      aguinaldo: Number(aguinaldoAmt),
       gastosTotales: jobExpenses,
       mes: mesSnapshot,
       createdAt: serverTimestamp()
@@ -144,6 +146,7 @@ export default function Trabajos() {
     setShowRenewModal(null);
     setShowExpModal(null);
     setEditingExpId(null);
+    setAguinaldoAmt('');
     setTitle('');
     setSalary('');
     setLeftoverAmt('');
@@ -272,11 +275,16 @@ export default function Trabajos() {
       {showRenewModal && (
         <Modal title="Cerrar y Renovar Mes" onClose={closeModals}>
           <form onSubmit={handleRenew}>
-            <p style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>Esta acción guardará el mes actual en el historial.</p>
-            <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>¿Sobrante del mes anterior?</label>
+            <p style={{ fontSize: '0.875rem', marginBottom: '1rem', color: 'var(--primary)' }}>Cerrando el mes para esta tarjeta.</p>
+            
+            <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>¿El mes pasado cobraste Aguinaldo? (Opcional)</label>
+            <input className="input-field" type="number" placeholder="Ej: 50000" value={aguinaldoAmt} onChange={e => setAguinaldoAmt(e.target.value)} />
+            
+            <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>¿Plata que te SOBRÓ del mes anterior?</label>
             <input className="input-field" type="number" placeholder="0 si no sobró nada" value={leftoverAmt} onChange={e => setLeftoverAmt(e.target.value)} required />
+            
             <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>Sueldo del NUEVO mes</label>
-            <input className="input-field" type="number" placeholder="Sueldo a cobrar" value={nextSalary} onChange={e => setNextSalary(e.target.value)} required />
+            <input className="input-field" type="number" placeholder="Sueldo a cobrar ahora" value={nextSalary} onChange={e => setNextSalary(e.target.value)} required />
             <button className="btn-primary" style={{ width: '100%' }}>Renovar</button>
           </form>
         </Modal>

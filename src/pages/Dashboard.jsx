@@ -20,15 +20,16 @@ export default function Dashboard() {
   // Calculate historical values if a past month is selected
   let dSueldos = totals.sueldos;
   let dGastos = totals.gastos;
+  let dAguinaldo = 0;
   let dNeto = dSueldos - dGastos;
 
   if (isHistorical) {
     // Para historial, usamos el snapshot de sueldos que se guardó en "Renovar Mes"
-    // El "historial_sueldos" tiene { mes: "2026-03", salary: X, gastosTotales: Y }
-    // O si el usuario quiere ver los gastos que ocurrieron literalmente en esa fecha:
+    // El "historial_sueldos" tiene { mes: "2026-03", salary: X, gastosTotales: Y, aguinaldo: Z }
     
-    // Sueldos guardados en historial para ese mes
+    // Sueldos y aguinaldo guardados en historial para ese mes
     const sueldosHist = historialSueldos.filter(h => h.mes === selectedMonth).reduce((acc, h) => acc + Number(h.salary), 0);
+    const aguinaldosHist = historialSueldos.filter(h => h.mes === selectedMonth).reduce((acc, h) => acc + (Number(h.aguinaldo) || 0), 0);
     
     // Gastos que se cargaron durante ese mes (basado en la fecha del gasto)
     const gastosHist = gastos.filter(g => {
@@ -40,7 +41,9 @@ export default function Dashboard() {
     
     dSueldos = sueldosHist;
     dGastos = gastosHist;
-    dNeto = dSueldos - dGastos;
+    dAguinaldo = aguinaldosHist;
+    // El neto histórico es sueldo base + aguinaldo - gastos
+    dNeto = dSueldos + dAguinaldo - dGastos;
   }
 
   const currentDate = isHistorical 
@@ -99,6 +102,14 @@ export default function Dashboard() {
           <span className="text-muted" style={{ fontSize: '0.875rem' }}>Sueldos Brutos</span>
           <span style={{ fontWeight: 500 }}><Value amount={dSueldos} /></span>
         </div>
+        
+        {isHistorical && dAguinaldo > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+            <span className="text-muted" style={{ fontSize: '0.875rem' }}>Aguinaldo / Bonos</span>
+            <span className="text-secondary" style={{ fontWeight: 500 }}>+ <Value amount={dAguinaldo} /></span>
+          </div>
+        )}
+
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px dashed var(--border-color)' }}>
           <span className="text-muted" style={{ fontSize: '0.875rem' }}>Viáticos/Gastos</span>
           <span className="text-danger" style={{ fontWeight: 500 }}>- <Value amount={dGastos} /></span>
