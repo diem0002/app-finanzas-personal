@@ -1,64 +1,132 @@
 import { useState } from 'react';
-import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import useStore from '../store/useStore';
 import { useFinanceData } from '../hooks/useFinanceData';
 import Value from '../components/Value';
-import { Plus, Briefcase, RefreshCw, X } from 'lucide-react';
+import { Plus, Briefcase, RefreshCw, X, Edit2, Trash2, Receipt } from 'lucide-react';
 
 export default function Trabajos() {
   const userId = useStore((state) => state.userId);
-  const { trabajos, loading } = useFinanceData();
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showRenewModal, setShowRenewModal] = useState(null); // id del trabajo a renovar
+  const { trabajos, gastos, loading } = useFinanceData();
   
-  // States for Add
-  const [newTitle, setNewTitle] = useState('');
-  const [newSalary, setNewSalary] = useState('');
-
-  // States for Renew
+  // Modals
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(null); // id
+  const [showRenewModal, setShowRenewModal] = useState(null); // id
+  const [showExpModal, setShowExpModal] = useState(null); // id
+  
+  // States
+  const [title, setTitle] = useState('');
+  const [salary, setSalary] = useState('');
+  
   const [leftoverAmt, setLeftoverAmt] = useState('');
   const [nextSalary, setNextSalary] = useState('');
 
+  const [expAmt, setExpAmt] = useState('');
+  const [expDesc, setExpDesc] = useState('');
+
+  // CREATE JOB
   const handleAddJob = async (e) => {
     e.preventDefault();
-    if (!newTitle || !newSalary) return;
-
+    if (!title || !salary) return;
     await addDoc(collection(db, `users/${userId}/trabajos`), {
-      name: newTitle,
-      salary: Number(newSalary),
+      name: title,
+      salary: Number(salary),
       createdAt: serverTimestamp(),
       lastUpdated: new Date().toISOString()
     });
-
-    setShowAddModal(false);
-    setNewTitle('');
-    setNewSalary('');
+    closeModals();
   };
 
+  // EDIT JOB
+  const handleEditJob = async (e) => {
+    e.preventDefault();
+    if (!showEditModal || !title) return;
+    await updateDoc(doc(db, `users/${userId}/trabajos`, showEditModal), {
+      name: title
+    });
+    closeModals();
+  };
+
+  // DELETE JOB
+  const handleDelete = async (jobId) => {
+    if (window.confirm('¿Seguro que deseas eliminar esta tarjeta? (No afectará tu historial pasado)')) {
+      await deleteDoc(doc(db, `users/${userId}/trabajos`, jobId));
+    }
+  };
+
+  // RENEW MONTH
   const handleRenew = async (e) => {
     e.preventDefault();
     if (!showRenewModal) return;
 
+    const job = trabajos.find(t => t.id === showRenewModal);
     const amt = Number(leftoverAmt);
-    // 1. Si hay sobrante, guardarlo en la coleccion sobrantes
+
+    // 1. Guardar sobrantes si hay
     if (amt > 0) {
       await addDoc(collection(db, `users/${userId}/sobrantes`), {
         amount: amt,
-        desc: `Sobrante mes anterior - Trabajo`,
+        desc: `Sobrante mes anterior - ${job.name}`,
         createdAt: serverTimestamp()
       });
     }
 
-    // 2. Actualizar el sueldo de la tarjeta y la fecha
+    // 2. Crear snapshot del mes cerrado en "historial_sueldos"
+    const jobExpenses = gastos.filter(g => g.jobId === showRenewModal).reduce((acc, g) => acc + Number(g.amount), 0);
+    const mesSnapshot = new Date().toISOString().substring(0, 7); // "YYYY-MM"
+
+    await addDoc(collection(db, `users/${userId}/historial_sueldos`), {
+      jobId: job.id,
+      name: job.name,
+      salary: job.salary,
+      gastosTotales: jobExpenses,
+      mes: mesSnapshot,
+      createdAt: serverTimestamp()
+    });
+
+    // 3. Actualizar el trabajo con el nuevo sueldo
     await updateDoc(doc(db, `users/${userId}/trabajos`, showRenewModal), {
       salary: Number(nextSalary),
       lastUpdated: new Date().toISOString()
     });
 
+    // Nota: Idealmente al renovar un mes podrías archivar los "gastos" viejos 
+    // pero como ahora permitimos ver meses anteriores, la consulta del dashboard 
+    // lo filtrará todo por fechas.
+
+    closeModals();
+  };
+
+  // ADD EXPENSE
+  const handleAddExpense = async (e) => {
+    e.preventDefault();
+    if (!showExpModal || !expAmt) return;
+    await addDoc(collection(db, `users/${userId}/gastos`), {
+      jobId: showExpModal,
+      amount: Number(expAmt),
+      desc: expDesc || 'Gasto/Viático',
+      date: serverTimestamp()
+    });
+    closeModals();
+  };
+
+  const closeModals = () => {
+    setShowAddModal(false);
+    setShowEditModal(null);
     setShowRenewModal(null);
+    setShowExpModal(null);
+    setTitle('');
+    setSalary('');
     setLeftoverAmt('');
     setNextSalary('');
+    setExpAmt('');
+    setExpDesc('');
+  };
+
+  const getExpensesForJob = (jobId) => {
+    return gastos.filter(g => g.jobId === jobId).reduce((acc, g) => acc + Number(g.amount), 0);
   };
 
   if (loading) return <div>Cargando...</div>;
@@ -72,56 +140,94 @@ export default function Trabajos() {
         </button>
       </div>
 
-      {trabajos.map(job => (
-        <div key={job.id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ padding: '0.5rem', backgroundColor: 'var(--bg-app)', borderRadius: '0.5rem' }}>
-                <Briefcase size={20} color="var(--primary)" />
+      {trabajos.map(job => {
+        const jobExpenses = getExpensesForJob(job.id);
+        const netto = job.salary - jobExpenses;
+
+        return (
+          <div key={job.id} className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <div style={{ padding: '0.5rem', backgroundColor: 'var(--bg-app)', borderRadius: '0.5rem' }}>
+                  <Briefcase size={20} color="var(--primary)" />
+                </div>
+                <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>{job.name}</span>
               </div>
-              <span style={{ fontWeight: 600, fontSize: '1.1rem' }}>{job.name}</span>
+              
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button onClick={() => {setTitle(job.name); setShowEditModal(job.id);}} className="text-muted"><Edit2 size={16} /></button>
+                <button onClick={() => handleDelete(job.id)} className="text-danger"><Trash2 size={16} /></button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'var(--bg-app)', padding: '0.75rem', borderRadius: '0.5rem' }}>
+              <div>
+                <p className="text-muted" style={{ fontSize: '0.75rem' }}>Sueldo Bruto</p>
+                <p style={{ fontWeight: 600 }}><Value amount={job.salary} /></p>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <p className="text-muted" style={{ fontSize: '0.75rem' }}>Gastos</p>
+                <p className="text-danger" style={{ fontWeight: 600 }}>- <Value amount={jobExpenses} /></p>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <p className="text-muted" style={{ fontSize: '0.75rem' }}>Neto</p>
+                <p className="text-success" style={{ fontWeight: 700 }}><Value amount={netto} /></p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button onClick={() => setShowExpModal(job.id)} className="btn-outline" style={{ flex: 1, padding: '0.5rem', fontSize: '0.75rem', backgroundColor: 'var(--bg-app)' }}>
+                <Receipt size={14} /> Añadir Gasto
+              </button>
+              <button onClick={() => setShowRenewModal(job.id)} className="btn-primary" style={{ flex: 1, padding: '0.5rem', fontSize: '0.75rem' }}>
+                <RefreshCw size={14} /> Renovar Mes
+              </button>
             </div>
             
-            <button onClick={() => setShowRenewModal(job.id)} className="btn-outline" style={{ padding: '0.5rem', fontSize: '0.75rem', backgroundColor: 'var(--bg-app)' }}>
-              <RefreshCw size={14} /> Renovar Mes
-            </button>
           </div>
+        );
+      })}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginTop: '0.5rem' }}>
-            <div>
-              <p className="text-muted" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Sueldo Actual</p>
-              <p style={{ fontWeight: 600 }}><Value amount={job.salary} /></p>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <p className="text-muted" style={{ fontSize: '0.75rem', marginBottom: '0.25rem' }}>Última Actualización</p>
-              <p style={{ fontSize: '0.875rem' }}>{new Date(job.lastUpdated).toLocaleDateString()}</p>
-            </div>
-          </div>
-        </div>
-      ))}
-
-      {/* Add Job Modal */}
+      {/* Adding/Editing Modals */}
       {showAddModal && (
-        <Modal title="Nuevo Trabajo Fijo" onClose={() => setShowAddModal(false)}>
+        <Modal title="Nuevo Trabajo" onClose={closeModals}>
           <form onSubmit={handleAddJob}>
-            <input className="input-field" placeholder="Ej: Trabajo Oficina" value={newTitle} onChange={e => setNewTitle(e.target.value)} required />
-            <input className="input-field" type="number" placeholder="Sueldo inicial" value={newSalary} onChange={e => setNewSalary(e.target.value)} required />
-            <button className="btn-primary" style={{ width: '100%' }}>Crear Tarjeta</button>
+            <input className="input-field" placeholder="Nombre (Ej: Oficina)" value={title} onChange={e => setTitle(e.target.value)} required />
+            <input className="input-field" type="number" placeholder="Sueldo" value={salary} onChange={e => setSalary(e.target.value)} required />
+            <button className="btn-primary" style={{ width: '100%' }}>Crear</button>
           </form>
         </Modal>
       )}
 
-      {/* Renew Job Modal */}
+      {showEditModal && (
+        <Modal title="Editar Nombre" onClose={closeModals}>
+          <form onSubmit={handleEditJob}>
+            <input className="input-field" placeholder="Nuevo Nombre" value={title} onChange={e => setTitle(e.target.value)} required />
+            <button className="btn-primary" style={{ width: '100%' }}>Guardar</button>
+          </form>
+        </Modal>
+      )}
+
+      {showExpModal && (
+        <Modal title="Registrar Gasto/Viático" onClose={closeModals}>
+          <form onSubmit={handleAddExpense}>
+            <input className="input-field" type="number" placeholder="Monto del gasto" value={expAmt} onChange={e => setExpAmt(e.target.value)} required />
+            <input className="input-field" placeholder="Descripción (Ej: Nafta)" value={expDesc} onChange={e => setExpDesc(e.target.value)} required />
+            <button className="btn-primary" style={{ width: '100%' }}>Guardar Gasto</button>
+          </form>
+        </Modal>
+      )}
+
       {showRenewModal && (
-        <Modal title="Cargar Nuevo Mes" onClose={() => setShowRenewModal(null)}>
+        <Modal title="Cerrar y Renovar Mes" onClose={closeModals}>
           <form onSubmit={handleRenew}>
-            <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>¿Te sobró dinero del mes anterior?</label>
-            <input className="input-field" type="number" placeholder="Monto sobrante (0 si nada)" value={leftoverAmt} onChange={e => setLeftoverAmt(e.target.value)} required />
-            
-            <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>Sueldo del Nuevo Mes</label>
-            <input className="input-field" type="number" placeholder="Sueldo" value={nextSalary} onChange={e => setNextSalary(e.target.value)} required />
-            
-            <button className="btn-primary" style={{ width: '100%' }}>Confirmar Renovación</button>
+            <p style={{ fontSize: '0.875rem', marginBottom: '1rem' }}>Esta acción guardará el mes actual en el historial.</p>
+            <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>¿Sobrante del mes anterior?</label>
+            <input className="input-field" type="number" placeholder="0 si no sobró nada" value={leftoverAmt} onChange={e => setLeftoverAmt(e.target.value)} required />
+            <label className="text-muted" style={{ fontSize: '0.875rem', display: 'block', marginBottom: '0.5rem' }}>Sueldo del NUEVO mes</label>
+            <input className="input-field" type="number" placeholder="Sueldo a cobrar" value={nextSalary} onChange={e => setNextSalary(e.target.value)} required />
+            <button className="btn-primary" style={{ width: '100%' }}>Renovar</button>
           </form>
         </Modal>
       )}
@@ -136,7 +242,7 @@ function Modal({ title, children, onClose }) {
       <div className="glass-card animate-slide-up" style={{ width: '90%', maxWidth: '400px', backgroundColor: 'var(--bg-card)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem' }}>
           <h3 className="title" style={{ marginBottom: 0, fontSize: '1.2rem' }}>{title}</h3>
-          <button onClick={onClose}><X size={20} color="var(--text-muted)"/></button>
+          <button type="button" onClick={onClose}><X size={20} color="var(--text-muted)"/></button>
         </div>
         {children}
       </div>

@@ -9,7 +9,9 @@ export function useFinanceData() {
     trabajos: [],
     ahorros: [],
     sobrantes: [],
-    totals: { sueldos: 0, ahorrosArs: 0, ahorrosUsd: 0, sobrantes: 0, granTotalArs: 0 },
+    gastos: [],
+    historialSueldos: [],
+    totals: { sueldos: 0, ahorrosArs: 0, ahorrosUsd: 0, sobrantes: 0, gastos: 0, granTotalArs: 0 },
     loading: true
   });
 
@@ -26,6 +28,8 @@ export function useFinanceData() {
     const qTrabajos = query(collection(db, `users/${userId}/trabajos`));
     const qAhorros = query(collection(db, `users/${userId}/ahorros`));
     const qSobrantes = query(collection(db, `users/${userId}/sobrantes`));
+    const qGastos = query(collection(db, `users/${userId}/gastos`));
+    const qHistorial = query(collection(db, `users/${userId}/historial_sueldos`));
 
     const unsubTrabajos = onSnapshot(qTrabajos, (snap) => {
       const _trabajos = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -42,10 +46,22 @@ export function useFinanceData() {
       updateState('sobrantes', _sobrantes.sort((a,b) => b.createdAt?.toMillis() - a.createdAt?.toMillis()));
     });
 
+    const unsubGastos = onSnapshot(qGastos, (snap) => {
+      const _gastos = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      updateState('gastos', _gastos.sort((a,b) => b.date?.toMillis() - a.date?.toMillis()));
+    });
+
+    const unsubHistorial = onSnapshot(qHistorial, (snap) => {
+      const _historial = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      updateState('historialSueldos', _historial);
+    });
+
     return () => {
       unsubTrabajos();
       unsubAhorros();
       unsubSobrantes();
+      unsubGastos();
+      unsubHistorial();
     };
   }, [userId]);
 
@@ -61,11 +77,13 @@ export function useFinanceData() {
       
       const sobrantes = newState.sobrantes.reduce((acc, tx) => acc + (Number(tx.amount) || 0), 0);
       
-      const granTotalArs = sueldos + ahorrosArs + sobrantes;
+      const gastos = newState.gastos.reduce((acc, tx) => acc + (Number(tx.amount) || 0), 0);
+
+      const granTotalArs = (sueldos - gastos) + ahorrosArs + sobrantes;
 
       return {
         ...newState,
-        totals: { sueldos, ahorrosArs, ahorrosUsd, sobrantes, granTotalArs },
+        totals: { sueldos, ahorrosArs, ahorrosUsd, sobrantes, gastos, granTotalArs },
         loading: false
       };
     });
