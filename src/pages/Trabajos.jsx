@@ -80,7 +80,8 @@ export default function Trabajos() {
     }
 
     // 2. Crear snapshot del mes cerrado en "historial_sueldos"
-    const jobExpenses = gastos.filter(g => g.jobId === showRenewModal).reduce((acc, g) => acc + Number(g.amount), 0);
+    const activeGastos = gastos.filter(g => g.jobId === showRenewModal && !g.archived);
+    const jobExpenses = activeGastos.reduce((acc, g) => acc + Number(g.amount), 0);
     const mesSnapshot = new Date().toISOString().substring(0, 7); // "YYYY-MM"
 
     await addDoc(collection(db, `users/${userId}/historial_sueldos`), {
@@ -100,9 +101,8 @@ export default function Trabajos() {
       lastUpdated: new Date().toISOString()
     });
 
-    // Nota: Idealmente al renovar un mes podrías archivar los "gastos" viejos 
-    // pero como ahora permitimos ver meses anteriores, la consulta del dashboard 
-    // lo filtrará todo por fechas.
+    // 4. Archivar los gastos de este mes para que la tarjeta empiece limpia
+    await Promise.all(activeGastos.map(g => updateDoc(doc(db, `users/${userId}/gastos`, g.id), { archived: true })));
 
     closeModals();
   };
@@ -161,7 +161,7 @@ export default function Trabajos() {
   };
 
   const getExpensesForJob = (jobId) => {
-    return gastos.filter(g => g.jobId === jobId);
+    return gastos.filter(g => g.jobId === jobId && !g.archived);
   };
 
   if (loading) return <div>Cargando...</div>;

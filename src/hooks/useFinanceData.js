@@ -78,7 +78,7 @@ export function useFinanceData() {
       
       const sobrantes = newState.sobrantes.reduce((acc, tx) => acc + (Number(tx.amount) || 0), 0);
       
-      const gastos = newState.gastos.reduce((acc, tx) => acc + (Number(tx.amount) || 0), 0);
+      const gastos = newState.gastos.filter(g => !g.archived).reduce((acc, tx) => acc + (Number(tx.amount) || 0), 0);
 
       const granTotalArs = (sueldos + aguinaldos - gastos) + ahorrosArs + sobrantes;
 
